@@ -23,6 +23,8 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.UnsupportedEncodingException;
+import java.text.DecimalFormat;
 import java.util.List;
 import java.util.Locale;
 
@@ -38,18 +40,25 @@ public class MainActivity extends Activity {
     private static final long SCAN_PERIOD = 10000; //扫描10秒
 
     private boolean mConnected = false;
-    private Thread myConnectThread;
+//    private Thread myConnectThread;
 
     /*private ArrayList<ArrayList<BluetoothGattCharacteristic>> mGattCharacteristics =
             new ArrayList<ArrayList<BluetoothGattCharacteristic>>();*/
     private List<BluetoothGattService> mGattServices;
 
-    private Button btn_enter;
+    private Button btn_enter, btnSsck, btnGps, btnWlzt, btnSbbm;
     private EditText et_enterData;
     private TextView tv_showData;
 
     public static String OBD_WRITE = "0000fff2-0000-1000-8000-00805f9b34fb";
     public static String OBD_READ = "0000fff1-0000-1000-8000-00805f9b34fb";
+    private final String OPEN_SSCK = "55AA0004800401100D0A";
+    private final String CLOSE_SSCK = "55AA0004800400110D0A";
+    private final String WLZT = "55AA0004800501100D0A";
+    private final String SBBM = "55AA0004800505100D0A";
+    private final String OPEN_GPS = "55AA0004800601110D0A";
+    private final String CLOSE_GPS = "55AA0004800600100D0A";
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,8 +68,12 @@ public class MainActivity extends Activity {
         btn_enter = (Button) findViewById(R.id.btn_enter);
         et_enterData = (EditText) findViewById(R.id.et_enterData);
         tv_showData = (TextView) findViewById(R.id.tv_showData);
+        btnSsck = (Button) findViewById(R.id.btn_ssck);
+        btnGps = (Button) findViewById(R.id.btn_gps);
+        btnWlzt = (Button) findViewById(R.id.btn_wlzt);
+        btnSbbm = (Button) findViewById(R.id.btn_sbbm);
 
-        handler = new Handler();
+//        handler = new Handler();
 
         if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
             Toast.makeText(this, "您的设备不支持BLE", Toast.LENGTH_SHORT).show();
@@ -84,7 +97,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        myConnectThread = new Thread(){
+        /*myConnectThread = new Thread(){
             @Override
             public void run() {
                 try {
@@ -98,7 +111,7 @@ public class MainActivity extends Activity {
             }
         };
 
-        myConnectThread.start();
+        myConnectThread.start();*/
 
         //字符串测试
         /*String sd = "438001123";
@@ -118,6 +131,38 @@ public class MainActivity extends Activity {
                 break;
         }
         Log.i("song", "valueOf:" + sd.substring(2, 6) + "  sd的长度为：" + sd.length() + "最后一位：" + sd.substring(8,9));*/
+
+        btnSsck.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                byte[] send = hex2ByteArray(OPEN_SSCK.toUpperCase(Locale.ENGLISH));
+                senDataToBle(send);
+            }
+        });
+
+        btnSbbm.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                byte[] send = hex2ByteArray(SBBM.toUpperCase(Locale.ENGLISH));
+                senDataToBle(send);
+            }
+        });
+
+        btnWlzt.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                byte[] send = hex2ByteArray(WLZT.toUpperCase(Locale.ENGLISH));
+                senDataToBle(send);
+            }
+        });
+
+        btnGps.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                byte[] send = hex2ByteArray(OPEN_GPS.toUpperCase(Locale.ENGLISH));
+                senDataToBle(send);
+            }
+        });
     }
 
     private void startServiceAndBroadCast(){
@@ -137,24 +182,23 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-
+        bluetoothAdapter.startLeScan(mLeScanCallback);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        if (mConnected)
+        if (mConnected){
             unregisterReceiver(broadcastReceiver);
+            unbindService(mServiceConnection);
+            bluetoothLeService = null;
+        }
+        bluetoothAdapter.stopLeScan(mLeScanCallback);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (mConnected){
-            unbindService(mServiceConnection);
-            bluetoothLeService = null;
-        }
-        mConnected = true;  //起到终止线程的作用
     }
 
     /**
@@ -194,10 +238,12 @@ public class MainActivity extends Activity {
                 @Override
                 public void run() {
                     Log.i("song", "扫描到的BLE：" + bluetoothDevice.getName());
-                    if (bluetoothDevice.getName().equals("BLE to UART_2")){
-                        myDevice = bluetoothDevice;
-                        bluetoothAdapter.stopLeScan(mLeScanCallback);
-                        startServiceAndBroadCast();
+                    if (bluetoothDevice != null){
+                        if (bluetoothDevice.getName().equals("BLE to UART_2")){
+                            myDevice = bluetoothDevice;
+                            bluetoothAdapter.stopLeScan(mLeScanCallback);
+                            startServiceAndBroadCast();
+                        }
                     }
                 }
             });
@@ -248,13 +294,14 @@ public class MainActivity extends Activity {
                     break;
                 case BluetoothLeService.ACTION_GATT_DISCONNECTED:
                     mConnected = false;
+                    bluetoothAdapter.startLeScan(mLeScanCallback);
                     Log.i("song", "蓝牙未连接");
                     break;
                 case BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED:
                     mGattServices = bluetoothLeService.getSupportedGattServices();
-                    Log.i("song", "获取蓝牙服务");
+//                    Log.i("song", "获取蓝牙服务");
                     readBleData();
-                    Log.i("song", "onServiceConnected开始读取数据");
+//                    Log.i("song", "onServiceConnected开始读取数据");
                     break;
                 case BluetoothLeService.ACTION_DATA_AVAILABLE:
                     //获取广播传递过来的数据
@@ -281,7 +328,7 @@ public class MainActivity extends Activity {
     //显示接收到的数据
     private void displayData(String data){
         if (data != null){
-            Log.i("song", "获取到的数据：" + data);
+//            Log.i("song", "获取到的数据：" + data);
             decodeBleData(data);
             tv_showData.setText(data);
         }
@@ -307,15 +354,18 @@ public class MainActivity extends Activity {
      * @param v
      */
     public void SendButtonTapped(View v){
+        byte[] send = hex2ByteArray(et_enterData.getText().toString().toUpperCase(Locale.ENGLISH));
+        senDataToBle(send);
+    }
+
+    private void senDataToBle(byte[] sendData){
         if (mConnected){
-            byte[] send = hex2ByteArray(et_enterData.getText().toString().toUpperCase(Locale.ENGLISH));
-//            byte[] send = 55AA0004800401010D0A;
             for (BluetoothGattService gattService : mGattServices){
                 List<BluetoothGattCharacteristic> gattCharacteristics = gattService.getCharacteristics();
                 for (BluetoothGattCharacteristic characteristic : gattCharacteristics){
                     if (OBD_WRITE.equals(characteristic.getUuid().toString())){
                         //发送数据给蓝牙模块
-                        characteristic.setValue(send);
+                        characteristic.setValue(sendData);
                         bluetoothLeService.writeCharacteristic(characteristic);
                     }
                 }
@@ -370,25 +420,31 @@ public class MainActivity extends Activity {
     String bleDatas = "";
     private void decodeBleData(String data){
 
-        int dLong = data.length(); //获取该字符串的长度
-        if (dLong>=4){
-            if (data.substring(dLong-4, dLong).equals("0D0A")){
-                if (data.substring(0, 4).equals("55AA")){
-                    decodeData(data);
-                    bleDatas = "";
+        if (mConnected){
+            int dLong = data.length(); //获取该字符串的长度
+            if (dLong>=4){
+                if (data.substring(dLong-4, dLong).equals("0D0A")){
+                    if (data.substring(0, 4).equals("55AA")){
+                        decodeData(data);
+                        bleDatas = "";
+                    }else {
+                        bleDatas += data;
+                        decodeData(bleDatas);
+                        bleDatas = "";
+                    }
                 }else {
                     bleDatas += data;
-                    decodeData(bleDatas);
-                    bleDatas = "";
                 }
             }else {
                 bleDatas += data;
+                decodeData(bleDatas);
+                bleDatas = "";
             }
         }else {
-            bleDatas += data;
-            decodeData(bleDatas);
+            data = "";
             bleDatas = "";
         }
+
         /*if (dLong > 0){
             String dHead = data.substring(0, 3); //取出头部的4位数
             String dEnd = data.substring(dLong-4, dLong); //取出尾部4位数
@@ -425,55 +481,99 @@ public class MainActivity extends Activity {
      *             先取出其中的数据部分，将数据转换为10进制数
      */
     private void decodeData(String data){
-
         Log.i("song", "整条数据：" + data);
-
-        int longD = data.length();
-        String length = data.substring(4, 8); //数据部分的长度（命令码+内容+校验码）
-        String order = data.substring(8, 12); //获取命令码4位
-        String dataD = data.substring(12, longD-5); //数据N位
-        byte[] myData = hexStringToByte(dataD); //获取的数据
-        String checkCode = data.substring(longD - 5, longD - 3); //校验码2位
-//        int lengthNum = Integer.valueOf(length, 16);
-//        int orderNum = Integer.valueOf(order, 16); //例如“F4”->0xF4
-
-        /*for (byte testb : myData){
-            Log.i("song", "myData里的数据：" + (testb&0xFF));
-        }*/
-
-        switch (order){
-            case "8001":
-                Log.i("song", "电瓶电压：" + (myData[0]&0xFF)*0.1 + "V");
-                Log.i("song", "发动机转速：" + ((myData[1]&0xFF)*256 + (myData[2]&0xFF)));
-                Log.i("song", "车速：" + ((myData[3]&0xFF)) + "km/h");
-                Log.i("song", "冷却液温度：" + ((myData[4]&0xFF) - 40) + "℃");
-                Log.i("song", "油箱压力绝对值：" + (myData[5]&0xFF));
-                Log.i("song", "此次点火之后行驶时间：" + ((myData[6]&0xFF)*65535 + (myData[7]&0xFF)*256 + (myData[8]&0xFF)) + "s");
-                Log.i("song", "此次点火之后行驶里程：" + ((myData[9]&0xFF)*65536 +(myData[10]&0xFF)*256 +(myData[11]&0xFF)) + "m");
-                Log.i("song", "此次点火之后燃油消耗：" + ((myData[12]&0xFF)*256 +(myData[13]&0xFF))*0.001 + "L");
-                Log.i("song", "瞬时油耗标识：" + Integer.toHexString(myData[14] & 0xFF));
-                Log.i("song", "瞬时油耗：" + ((myData[15]&0xFF)*256+(myData[16]&0xFF))*0.01 + "L/100KM");
-                Log.i("song", "剩余油量：" + ((myData[17]&0xFF)*256+(myData[18]&0xFF))*0.001 + "%");
-                Log.i("song", "急加速次数：" + (myData[19]&0xFF));
-                Log.i("song", "急减速次数：" + (myData[20]&0xFF));
-                Log.i("song", "急转弯次数：" + (myData[21]&0xFF));
-                Log.i("song", "故障码数量(最多10个)：" + (myData[22]&0xFF));
-                break;
-            case "8002":
-                Log.i("song", "8002实时车速数据：");
-                Log.i("song", "车速：" + (myData[0]&0xFF));
-                Log.i("song", "水温：" + (myData[1]&0xFF - 40));
-                /*Log.i("song", "车速：" + Integer.parseInt(data.substring(12, 14), 16));
-                Log.i("song", "水温：" + (Integer.parseInt(data.substring(14, 16), 16)-40));*/
-                break;
-            case "8003":
-                Log.i("song", "8003系统状态信息打印：");
-                break;
-            case "8010":
-                Log.i("song", "8010GPS状态数据：");
-                break;
-
+        int dataL = data.length();
+        if (dataL >= 22){
+            String dataD = data.substring(12, dataL - 5); //数据N位
+            byte[] myData = hexStringToByte(dataD); //获取的数据
+            if (checkNum(data, myData, dataL)){
+                String order = data.substring(8, 12); //获取命令码4位
+                DecimalFormat mdf = new DecimalFormat("#.##");
+                switch (order){
+                    case "8001":
+                        Log.i("song", "8001实时车况数据：");
+                        Log.i("song", "电瓶电压：" + (mdf.format((myData[0] & 0xFF) * 0.1) + "V"));
+                        Log.i("song", "发动机转速：" + ((myData[1]&0xFF)*256 + (myData[2]&0xFF)));
+                        Log.i("song", "车速：" + ((myData[3]&0xFF)) + "km/h");
+                        Log.i("song", "冷却液温度：" + ((myData[4]&0xFF) - 40) + "℃");
+                        Log.i("song", "油箱压力绝对值：" + (myData[5]&0xFF));
+                        Log.i("song", "此次点火之后行驶时间：" + ((myData[6]&0xFF)*65535 + (myData[7]&0xFF)*256 + (myData[8]&0xFF)) + "s");
+                        Log.i("song", "此次点火之后行驶里程：" + ((myData[9]&0xFF)*65536 +(myData[10]&0xFF)*256 +(myData[11]&0xFF)) + "m");
+                        Log.i("song", "此次点火之后燃油消耗：" + ((myData[12]&0xFF)*256 +(myData[13]&0xFF))*0.001 + "L");
+                        Log.i("song", "瞬时油耗标识：" + Integer.toHexString(myData[14] & 0xFF));
+                        Log.i("song", "瞬时油耗：" + ((myData[15]&0xFF)*256+(myData[16]&0xFF))*0.01 + "L/100KM");
+                        Log.i("song", "剩余油量：" + ((myData[17]&0xFF)*256+(myData[18]&0xFF))*0.001 + "%");
+                        Log.i("song", "急加速次数：" + (myData[19]&0xFF));
+                        Log.i("song", "急减速次数：" + (myData[20]&0xFF));
+                        Log.i("song", "急转弯次数：" + (myData[21]&0xFF));
+                        Log.i("song", "故障码数量(最多10个)：" + (myData[22]&0xFF));
+                        break;
+                    case "8002":
+                        Log.i("song", "8002实时车速数据：");
+                        Log.i("song", "车速：" + (myData[0]&0xFF));
+                        Log.i("song", "水温：" + (myData[1]&0xFF - 40));
+                        break;
+                    case "8003":
+                        String length = data.substring(4, 8); //数据部分的长度（命令码+内容+校验码）
+                        if (length.equals("0010")){
+                            Log.i("song", "8003系统状态信息打印：网络状态输出");
+                            Log.i("song", "系统网络状态：" + (myData[0]&0xFF));
+                            Log.i("song", "是否有SIM卡：" + (myData[1]&0xFF));
+                            Log.i("song", "是否有IMEI号：" + (myData[2]&0xFF));
+                            Log.i("song", "GSM信号强度：" + (myData[3]&0xFF));
+                            Log.i("song", "status：" + (myData[4]&0xFF));
+                            Log.i("song", "GSM_state ：" + (myData[5]&0xFF));
+                            Log.i("song", "GPRS_state ：" + (myData[6]&0xFF));
+                            Log.i("song", "GPRS_states ：" + (myData[7]&0xFF));
+                            Log.i("song", "lac ：" + "高位：" + (myData[8]&0xFF) + " 低位：" + (myData[9]&0xFF));
+                            Log.i("song", "rac ：" + (myData[10]&0xFF));
+                            Log.i("song", "Cell_id ：" + "高位：" + (myData[11]&0xFF) + " 低位：" + (myData[12]&0xFF));
+                        }else if (length.equals("0018")){
+                            Log.i("song", "8003系统状态信息打印：设备编号输出");
+                            String imei = "";
+                            try {
+                                imei = new String(myData,"ASCII");
+                            } catch (UnsupportedEncodingException e) {
+                                e.printStackTrace();
+                            }
+                            /*for (byte bi : myData){
+                                imei +=
+                                imei += bi;
+                            }*/
+                            Log.i("song", "设备编号：" + imei);
+                        }
+                        break;
+                    case "8010":
+                        Log.i("song", "8010GPS状态数据：");
+//                        if ((myData[]))
+                        break;
+                }
+            }
         }
+
+    }
+
+    //数据长度和校验码检验
+    private Boolean checkNum(String data, byte[] myData, int longD){
+        String length = data.substring(4, 8); //数据部分的长度（命令码+内容+校验码）
+        if (data.length() == ((Integer.valueOf(length,16))*2+12)) { //数据长度检验
+            //添加校验码
+            String checkNum = data.substring(longD - 6, longD - 4); //获取校验码
+            int x = 0;
+            for (byte checkB : myData) {
+                x += (checkB & 0xFF);
+            }
+            int check = ((x + 0x80 + Integer.valueOf(data.substring(10, 12), 16) + (Integer.valueOf(length, 16))) ^ 0xFF);
+            if (Integer.toHexString(check).length() > 2){
+                check = Integer.valueOf((Integer.toHexString(check).substring(1, 3)), 16);
+            }
+            Log.i("song", "校验码：" + checkNum + "值为：" + check + " 校验码转换后：" + Integer.toHexString(check));
+            if (check == (Integer.valueOf(checkNum, 16))) { //校验码检验
+                return true;
+            }else
+                return false;
+        }else
+            return false;
     }
 
     /**

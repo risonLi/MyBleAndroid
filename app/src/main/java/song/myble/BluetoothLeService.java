@@ -218,6 +218,7 @@ public class BluetoothLeService extends Service {
                     if (sTemp.length() < 2)
                         sb.append(0);
                     sb.append(sTemp.toUpperCase());
+//                    Log.i("ble", "sb:" + sb.toString());
                 }
                 intent.putExtra(EXTRA_DATA, sb.toString());
             }
@@ -294,8 +295,10 @@ public class BluetoothLeService extends Service {
         bluetoothGatt.setCharacteristicNotification(characteristic, enable);
         BluetoothGattDescriptor descriptor = characteristic.getDescriptor(
                UUID.fromString(CLIENT_CHARACTERISTIC_CONFIG));
-        descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-        bluetoothGatt.writeDescriptor(descriptor);
+        if (descriptor != null){
+            descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+            bluetoothGatt.writeDescriptor(descriptor);
+        }
     }
 
     /**

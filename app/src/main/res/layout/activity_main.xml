@@ -17,6 +17,27 @@
         android:onClick="SendButtonTapped"
         android:text="发送"/>
 
+    <Button
+        android:id="@+id/btn_ssck"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="开启实时车况"/>
+    <Button
+        android:id="@+id/btn_gps"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="开启GPS"/>
+    <Button
+        android:id="@+id/btn_wlzt"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="开启网络状态"/>
+    <Button
+        android:id="@+id/btn_sbbm"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="获取设备编码"/>
+
     <TextView
         android:id="@+id/tv_showData"
         android:layout_width="match_parent"
