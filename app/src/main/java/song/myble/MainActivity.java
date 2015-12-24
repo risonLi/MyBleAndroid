@@ -23,23 +23,24 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.io.UnsupportedEncodingException;
 import java.text.DecimalFormat;
 import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
 
-    private Handler handler;
+    private Handler handler, handlerStart;
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeService bluetoothLeService;
 
-    private BluetoothDevice myDevice = null;
+    private BluetoothDevice myDevice;
 
     private static final int REQUEST_ENABLE_BT = 1;
-    private static final long SCAN_PERIOD = 10000; //扫描10秒
+    private static final long SCAN_PERIOD = 5000; //5秒
 
     private boolean mConnected = false;
+    private boolean getData = false;
+    private boolean openOrNot = false;
 //    private Thread myConnectThread;
 
     /*private ArrayList<ArrayList<BluetoothGattCharacteristic>> mGattCharacteristics =
@@ -50,8 +51,11 @@ public class MainActivity extends Activity {
     private EditText et_enterData;
     private TextView tv_showData;
 
-    public static String OBD_WRITE = "0000fff2-0000-1000-8000-00805f9b34fb";
-    public static String OBD_READ = "0000fff1-0000-1000-8000-00805f9b34fb";
+    public final String OBD_WRITE2 = "0000fff2-0000-1000-8000-00805f9b34fb";
+    public final String OBD_WRITE5 = "0000fff5-0000-1000-8000-00805f9b34fb";
+    public final String OBD_READ1 = "0000fff1-0000-1000-8000-00805f9b34fb";
+    public final String OBD_READ4 = "0000fff4-0000-1000-8000-00805f9b34fb";
+
     private final String OPEN_SSCK = "55AA0004800401100D0A";
     private final String CLOSE_SSCK = "55AA0004800400110D0A";
     private final String WLZT = "55AA0004800501100D0A";
@@ -59,6 +63,7 @@ public class MainActivity extends Activity {
     private final String OPEN_GPS = "55AA0004800601110D0A";
     private final String CLOSE_GPS = "55AA0004800600100D0A";
 
+    private Intent gattServiceIntent;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,7 +78,8 @@ public class MainActivity extends Activity {
         btnWlzt = (Button) findViewById(R.id.btn_wlzt);
         btnSbbm = (Button) findViewById(R.id.btn_sbbm);
 
-//        handler = new Handler();
+        handler = new Handler();
+        handlerStart = new Handler();
 
         if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
             Toast.makeText(this, "您的设备不支持BLE", Toast.LENGTH_SHORT).show();
@@ -96,6 +102,20 @@ public class MainActivity extends Activity {
                 startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
             }
         }
+
+        gattServiceIntent = new Intent(this, BluetoothLeService.class);
+        bindService(gattServiceIntent, mServiceConnection, BIND_AUTO_CREATE);
+
+        /*handlerStart.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (bluetoothLeService != null) {
+                    final boolean result = bluetoothLeService.connect(myDevice.getAddress());
+                    Log.i("song", "bluetoothLeService服务连接：" + result);
+                }
+            }
+        }, SCAN_PERIOD);   //延迟5秒后执行*/
+
 
         /*myConnectThread = new Thread(){
             @Override
@@ -167,21 +187,37 @@ public class MainActivity extends Activity {
 
     private void startServiceAndBroadCast(){
         //启动BluetoothLeService
-        Intent gattServiceIntent = new Intent(this, BluetoothLeService.class);
-        bindService(gattServiceIntent, mServiceConnection, BIND_AUTO_CREATE);
+//            Intent gattServiceIntent = new Intent(this, BluetoothLeService.class);
+        /*if (myDevice != null && bluetoothLeService!= null){
+            Log.i("song", "myDevice不为空");
+            bluetoothLeService.disconnect();
+            bluetoothLeService.connect(myDevice.getAddress());
+        }else {*/
+//            bindService(gattServiceIntent, mServiceConnection, BIND_AUTO_CREATE);
+//            Log.i("song", "broadcastReceiver创建广播：" + broadcastReceiver);
+            /*//注册广播
+            registerReceiver(broadcastReceiver, makeGattUpdateIntentFilter());*/
 
-        //注册广播
-        registerReceiver(broadcastReceiver, makeGattUpdateIntentFilter());
+            if (bluetoothLeService != null){
+                final boolean result = bluetoothLeService.connect(myDevice.getAddress());
+                Log.i("song", "bluetoothLeService服务连接：" + result);
+            }
+//        }
+    }
 
+    private void stopServiceAndBroadCast(){
         if (bluetoothLeService != null){
-            final boolean result = bluetoothLeService.connect(myDevice.getAddress());
-            Log.i("song", "bluetoothLeService服务连接：" + result);
+            Log.i("song", "stopServiceAndBroadCast执行了");
+            unregisterReceiver(broadcastReceiver);
+            unbindService(mServiceConnection);
+            bluetoothLeService = null;
         }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        getData = false;
         bluetoothAdapter.startLeScan(mLeScanCallback);
     }
 
@@ -189,6 +225,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         if (mConnected){
+            Log.i("song", "onPause执行了");
             unregisterReceiver(broadcastReceiver);
             unbindService(mServiceConnection);
             bluetoothLeService = null;
@@ -208,14 +245,14 @@ public class MainActivity extends Activity {
     private void scanBleDevice(final boolean enable){
         if (enable) {
             // Stops scanning after a pre-defined scan period.
-            handler.postDelayed(new Runnable() {
+            /*handler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
 //                    mScanning = false;
                     bluetoothAdapter.stopLeScan(mLeScanCallback);
 //                    invalidateOptionsMenu();
                 }
-            }, SCAN_PERIOD);    //延迟10秒后执行
+            }, SCAN_PERIOD);    //延迟10秒后执行*/
 
 //            mScanning = true;
             bluetoothAdapter.startLeScan(mLeScanCallback);
@@ -237,13 +274,14 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    Log.i("song", "扫描到的BLE：" + bluetoothDevice.getName());
-                    if (bluetoothDevice != null){
-                        if (bluetoothDevice.getName().equals("BLE to UART_2")){
-                            myDevice = bluetoothDevice;
-                            bluetoothAdapter.stopLeScan(mLeScanCallback);
-                            startServiceAndBroadCast();
-                        }
+//                    Log.i("song", "myDevice:" + myDevice + "  bluetoothDevice:" + bluetoothDevice);
+                    if (bluetoothDevice.getName().equals("BLE to UART_2")){
+//                            stopServiceAndBroadCast();
+                        Log.i("song", "扫描到的BLE：" + bluetoothDevice.getName());
+                        myDevice = bluetoothDevice;
+                        bluetoothAdapter.stopLeScan(mLeScanCallback);
+//                            stopServiceAndBroadCast();
+                        startServiceAndBroadCast();
                     }
                 }
             });
@@ -258,23 +296,27 @@ public class MainActivity extends Activity {
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
             //获取服务
-            bluetoothLeService = ((BluetoothLeService.LocalBinder) iBinder).getService();
+            if (bluetoothLeService == null){
+                Log.i("ble", "bluetoothLeService创建了");
+                bluetoothLeService = ((BluetoothLeService.LocalBinder) iBinder).getService();
+                //注册广播
+                registerReceiver(broadcastReceiver, makeGattUpdateIntentFilter());
+            }
 
             if (!bluetoothLeService.initialize()){
                 finish();
             }
 
             //连接服务
-            if (myDevice != null){
+            /*if (myDevice != null){
                 bluetoothLeService.connect(myDevice.getAddress());
-            }
+            }*/
 
         }
 
         //断开服务
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
-            bluetoothLeService.disconnect();
             bluetoothLeService = null;
         }
     };
@@ -294,13 +336,29 @@ public class MainActivity extends Activity {
                     break;
                 case BluetoothLeService.ACTION_GATT_DISCONNECTED:
                     mConnected = false;
+                    getData = false;
+//                    stopServiceAndBroadCast();
                     bluetoothAdapter.startLeScan(mLeScanCallback);
+
+                    /*if (mConnected){
+                        bluetoothLeService.connect(myDevice.getAddress());
+                    }*/
                     Log.i("song", "蓝牙未连接");
                     break;
                 case BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED:
                     mGattServices = bluetoothLeService.getSupportedGattServices();
-//                    Log.i("song", "获取蓝牙服务");
+                    Log.i("song", "获取蓝牙服务");
+
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (mConnected == true && getData == false) {
+                                readBleData4();
+                            }
+                        }
+                    }, SCAN_PERIOD);   //延迟10秒后执行
                     readBleData();
+
 //                    Log.i("song", "onServiceConnected开始读取数据");
                     break;
                 case BluetoothLeService.ACTION_DATA_AVAILABLE:
@@ -327,8 +385,9 @@ public class MainActivity extends Activity {
 
     //显示接收到的数据
     private void displayData(String data){
+        Log.i("ble", "获取到的数据：" + data);
         if (data != null){
-//            Log.i("song", "获取到的数据：" + data);
+            getData = true;
             decodeBleData(data);
             tv_showData.setText(data);
         }
@@ -339,10 +398,31 @@ public class MainActivity extends Activity {
             for (BluetoothGattService gattService : mGattServices){
                 List<BluetoothGattCharacteristic> gattCharacteristics = gattService.getCharacteristics();
                 for (BluetoothGattCharacteristic characteristic : gattCharacteristics){
-                    if (OBD_READ.equals(characteristic.getUuid().toString())){
-                        Log.i("song", "readBleData开始读取指定UUID的数据");
+                    if (OBD_READ1.equals(characteristic.getUuid().toString())) {
+                        Log.i("song", "readBleData开始读取OBD_READ1的数据");
                         bluetoothLeService.readCharacteristic(characteristic);
-                        bluetoothLeService.setCharacteristicNotification(characteristic, true);
+//                        if (!openOrNot){
+                            bluetoothLeService.setCharacteristicNotification(characteristic, true);
+//                            openOrNot = true;
+//                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void readBleData4(){
+        if (mConnected){
+            for (BluetoothGattService gattService : mGattServices){
+                List<BluetoothGattCharacteristic> gattCharacteristics = gattService.getCharacteristics();
+                for (BluetoothGattCharacteristic characteristic : gattCharacteristics){
+                    if (OBD_READ4.equals(characteristic.getUuid().toString())) {
+                        Log.i("song", "readBleData开始读取OBD_READ4的数据");
+                        bluetoothLeService.readCharacteristic(characteristic);
+//                        if (!openOrNot){
+                            bluetoothLeService.setCharacteristicNotification(characteristic, true);
+//                            openOrNot = true;
+//                        }
                     }
                 }
             }
@@ -363,8 +443,12 @@ public class MainActivity extends Activity {
             for (BluetoothGattService gattService : mGattServices){
                 List<BluetoothGattCharacteristic> gattCharacteristics = gattService.getCharacteristics();
                 for (BluetoothGattCharacteristic characteristic : gattCharacteristics){
-                    if (OBD_WRITE.equals(characteristic.getUuid().toString())){
-                        //发送数据给蓝牙模块
+                    if (OBD_WRITE2.equals(characteristic.getUuid().toString())){
+                        Log.i("song", "senDataToBle写入OBD_WRITE2的数据");
+                        characteristic.setValue(sendData);
+                        bluetoothLeService.writeCharacteristic(characteristic);
+                    }else if (OBD_WRITE5.equals(characteristic.getUuid().toString())){
+                        Log.i("song", "senDataToBle写入OBD_WRITE5的数据");
                         characteristic.setValue(sendData);
                         bluetoothLeService.writeCharacteristic(characteristic);
                     }
@@ -492,7 +576,7 @@ public class MainActivity extends Activity {
                 switch (order){
                     case "8001":
                         Log.i("song", "8001实时车况数据：");
-                        Log.i("song", "电瓶电压：" + (mdf.format((myData[0] & 0xFF) * 0.1) + "V"));
+                        /*Log.i("song", "电瓶电压：" + (mdf.format((myData[0] & 0xFF) * 0.1) + "V"));
                         Log.i("song", "发动机转速：" + ((myData[1]&0xFF)*256 + (myData[2]&0xFF)));
                         Log.i("song", "车速：" + ((myData[3]&0xFF)) + "km/h");
                         Log.i("song", "冷却液温度：" + ((myData[4]&0xFF) - 40) + "℃");
@@ -506,15 +590,15 @@ public class MainActivity extends Activity {
                         Log.i("song", "急加速次数：" + (myData[19]&0xFF));
                         Log.i("song", "急减速次数：" + (myData[20]&0xFF));
                         Log.i("song", "急转弯次数：" + (myData[21]&0xFF));
-                        Log.i("song", "故障码数量(最多10个)：" + (myData[22]&0xFF));
+                        Log.i("song", "故障码数量(最多10个)：" + (myData[22]&0xFF));*/
                         break;
                     case "8002":
                         Log.i("song", "8002实时车速数据：");
-                        Log.i("song", "车速：" + (myData[0]&0xFF));
-                        Log.i("song", "水温：" + (myData[1]&0xFF - 40));
+                        /*Log.i("song", "车速：" + (myData[0]&0xFF));
+                        Log.i("song", "水温：" + (myData[1]&0xFF - 40));*/
                         break;
                     case "8003":
-                        String length = data.substring(4, 8); //数据部分的长度（命令码+内容+校验码）
+                        /*String length = data.substring(4, 8); //数据部分的长度（命令码+内容+校验码）
                         if (length.equals("0010")){
                             Log.i("song", "8003系统状态信息打印：网络状态输出");
                             Log.i("song", "系统网络状态：" + (myData[0]&0xFF));
@@ -536,12 +620,12 @@ public class MainActivity extends Activity {
                             } catch (UnsupportedEncodingException e) {
                                 e.printStackTrace();
                             }
-                            /*for (byte bi : myData){
+                            *//*for (byte bi : myData){
                                 imei +=
                                 imei += bi;
-                            }*/
+                            }*//*
                             Log.i("song", "设备编号：" + imei);
-                        }
+                        }*/
                         break;
                     case "8010":
                         Log.i("song", "8010GPS状态数据：");
@@ -567,7 +651,7 @@ public class MainActivity extends Activity {
             if (Integer.toHexString(check).length() > 2){
                 check = Integer.valueOf((Integer.toHexString(check).substring(1, 3)), 16);
             }
-            Log.i("song", "校验码：" + checkNum + "值为：" + check + " 校验码转换后：" + Integer.toHexString(check));
+//            Log.i("song", "校验码：" + checkNum + "值为：" + check + " 校验码转换后：" + Integer.toHexString(check));
             if (check == (Integer.valueOf(checkNum, 16))) { //校验码检验
                 return true;
             }else

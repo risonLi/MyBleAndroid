@@ -139,10 +139,9 @@ public class BluetoothLeService extends Service {
             }else if (newState == BluetoothProfile.STATE_DISCONNECTED){ //如果未连接
                 intentAction = ACTION_GATT_DISCONNECTED;
                 mConnectionState = STATE_CONNECTING;
-
+                close();
                 mBluetoothDeviceAddress = null;
                 bluetoothGatt = null;
-
                 broadcastUpdate(intentAction);
             }
         }
@@ -159,9 +158,12 @@ public class BluetoothLeService extends Service {
         //读取数据
         @Override
         public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
+            Log.i("song", "onCharacteristicRead中");
             if (status == BluetoothGatt.GATT_SUCCESS){
                 Log.i("song", "onCharacteristicRead读取数据中");
-                broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
+//                broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
+            }else {
+                Log.i("song", "onCharacteristicRead无法读取数据");
             }
         }
 
@@ -173,14 +175,12 @@ public class BluetoothLeService extends Service {
             }else {
                 Log.i(TAG, "onCharacteristicWrite status：" + status + " 写入失败");
             }
-
         }
 
         @Override
         public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
             broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
         }
-
     };
 
     /**
@@ -205,10 +205,9 @@ public class BluetoothLeService extends Service {
             }
             final int heartRate = characteristic.getIntValue(format, 1);
             //将数据放入intent，用于发送广播
-            intent.putExtra(EXTRA_DATA, String.valueOf(heartRate));
+//            intent.putExtra(EXTRA_DATA, String.valueOf(heartRate));
         }else {
             final byte[] data = characteristic.getValue();
-
             if (data != null && data.length > 0){
                 StringBuffer sb = new StringBuffer(data.length);
                 String sTemp;
@@ -221,18 +220,8 @@ public class BluetoothLeService extends Service {
 //                    Log.i("ble", "sb:" + sb.toString());
                 }
                 intent.putExtra(EXTRA_DATA, sb.toString());
+//                Log.i("song", "sb------:" + sb.toString());
             }
-
-            /*//将二进制数组转换为string字符串
-            if (data != null && data.length > 0){
-                final StringBuilder stringBuilder = new StringBuilder(data.length);
-                for (byte byteChar : data){
-                    //这里的%x指将数据转换为16进制
-                    stringBuilder.append(String.format("%x ", byteChar));
-                }
-                //将数据放入intent，用于发送广播
-                intent.putExtra(EXTRA_DATA, new String(data) + "\n" + stringBuilder.toString());
-            }*/
         }
         sendBroadcast(intent); //发送广播
     }
@@ -274,9 +263,13 @@ public class BluetoothLeService extends Service {
      * @param characteristic 指定读取的接口
      */
     public void readCharacteristic(BluetoothGattCharacteristic characteristic){
-        if (bluetoothAdapter == null || bluetoothGatt == null)
+        Log.i("song", "readCharacteristic");
+        if (bluetoothAdapter == null || bluetoothGatt == null){
+            Log.i("song", "bluetoothAdapter：" + bluetoothAdapter);
+            Log.i("song", "bluetoothGatt：" + bluetoothGatt);
             return;
-
+        }
+        Log.i("song", "characteristic" + characteristic);
         //bluetoothGatt利用回调函数进行数据读取
         bluetoothGatt.readCharacteristic(characteristic);
     }
